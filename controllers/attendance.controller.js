@@ -1,4 +1,9 @@
+
 import { supabase } from "../config/supabase.js";
+
+// ==========================================
+// SAVE ATTENDANCE
+// ==========================================
 
 export const saveAttendance = async (req, res) => {
   try {
@@ -17,13 +22,18 @@ export const saveAttendance = async (req, res) => {
     // Convert period to number
     const periodNumber = Number(period);
 
-    console.log("========== PERIOD DEBUG ==========");
     console.log("Received period:", period);
     console.log("Converted period:", periodNumber);
-    console.log("Type:", typeof periodNumber);
 
     // Validate period
-    if (!period || !Number.isInteger(periodNumber) || periodNumber < 1 || periodNumber > 8) {
+    if (
+      period === undefined ||
+      period === null ||
+      period === "" ||
+      !Number.isInteger(periodNumber) ||
+      periodNumber < 1 ||
+      periodNumber > 8
+    ) {
       return res.status(400).json({
         success: false,
         message: "Invalid period. Please select a period from 1 to 8.",
@@ -31,15 +41,25 @@ export const saveAttendance = async (req, res) => {
       });
     }
 
-    // Validate other fields
-    if (!teacher_id || !teacher_name || !class_name || !section || !present_students) {
+    // Validate required fields
+    if (
+      !teacher_id ||
+      !teacher_name ||
+      !class_name ||
+      !section ||
+      present_students === undefined ||
+      present_students === null ||
+      present_students === "" ||
+      !Number.isFinite(Number(present_students)) ||
+      Number(present_students) < 0
+    ) {
       return res.status(400).json({
         success: false,
         message: "All attendance fields are required.",
       });
     }
 
-    // Indian date/time
+    // Indian date and time
     const now = new Date();
 
     const attendance_date = now.toLocaleDateString("en-CA", {
@@ -51,7 +71,7 @@ export const saveAttendance = async (req, res) => {
       hour12: false,
     });
 
-    // Final data
+    // Final attendance data
     const attendanceData = {
       teacher_id: Number(teacher_id),
       teacher_name: String(teacher_name),
@@ -72,17 +92,13 @@ export const saveAttendance = async (req, res) => {
       .select();
 
     if (error) {
-      console.error("========== SUPABASE ERROR ==========");
-      console.error(error);
+      console.error("SUPABASE ERROR:", error);
 
       return res.status(500).json({
         success: false,
         message: error.message,
       });
     }
-
-    console.log("========== SUCCESS ==========");
-    console.log(data);
 
     return res.status(201).json({
       success: true,
@@ -91,12 +107,107 @@ export const saveAttendance = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("========== SERVER ERROR ==========");
-    console.error(error);
+    console.error("SERVER ERROR:", error);
 
     return res.status(500).json({
       success: false,
       message: error.message,
+    });
+  }
+};
+
+
+// ==========================================
+// EXPORT ATTENDANCE AS CSV
+// ==========================================
+
+export const exportAttendanceCSV = async (req, res) => {
+  try {
+    // Fetch all attendance records
+    const { data, error } = await supabase
+      .from("attendance")
+      .select("*")
+      .order("attendance_date", { ascending: false })
+      .order("attendance_time", { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data || data.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No attendance records found.",
+      });
+    }
+
+    // CSV column names
+    const columns = [
+      "id",
+      "teacher_id",
+      "teacher_name",
+      "class_name",
+      "section",
+      "period",
+      "present_students",
+      "attendance_date",
+      "attendance_time",
+    ];
+
+    // Escape CSV values
+    const escapeCSV = (value) => {
+      if (value === null || value === undefined) {
+        return '""';
+      }
+
+      let safeValue = String(value);
+
+      // Protect spreadsheet users from formula injection
+      if (/^[\s]*[=+\-@]/.test(safeValue)) {
+        safeValue = "'" + safeValue;
+      }
+
+      return `"${safeValue.replace(/"/g, '""')}"`;
+    };
+
+    // Create CSV rows
+    const csvRows = [
+      columns.join(","),
+      ...data.map((record) =>
+        columns
+          .map((column) => escapeCSV(record[column]))
+          .join(",")
+      ),
+    ];
+
+    // UTF-8 BOM for Excel compatibility
+    const csvContent = "\uFEFF" + csvRows.join("\r\n");
+
+    // File name
+    const fileName = `Student_Attendance_${new Date()
+      .toISOString()
+      .slice(0, 10)}.csv`;
+
+    // Download response
+    res.setHeader(
+      "Content-Type",
+      "text/csv; charset=utf-8"
+    );
+
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${fileName}"`
+    );
+
+    return res.status(200).send(csvContent);
+
+  } catch (error) {
+    console.error("CSV EXPORT ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to export attendance data.",
+      error: error.message,
     });
   }
 };

@@ -123,16 +123,13 @@ export const saveAttendance = async (req, res) => {
 
 export const exportAttendanceCSV = async (req, res) => {
   try {
-    // Fetch all attendance records
     const { data, error } = await supabase
       .from("attendance")
       .select("*")
       .order("attendance_date", { ascending: false })
       .order("attendance_time", { ascending: false });
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     if (!data || data.length === 0) {
       return res.status(404).json({
@@ -141,7 +138,6 @@ export const exportAttendanceCSV = async (req, res) => {
       });
     }
 
-    // CSV column names
     const columns = [
       "id",
       "teacher_id",
@@ -154,15 +150,11 @@ export const exportAttendanceCSV = async (req, res) => {
       "attendance_time",
     ];
 
-    // Escape CSV values
     const escapeCSV = (value) => {
-      if (value === null || value === undefined) {
-        return '""';
-      }
+      if (value === null || value === undefined) return '""';
 
       let safeValue = String(value);
 
-      // Protect spreadsheet users from formula injection
       if (/^[\s]*[=+\-@]/.test(safeValue)) {
         safeValue = "'" + safeValue;
       }
@@ -170,37 +162,26 @@ export const exportAttendanceCSV = async (req, res) => {
       return `"${safeValue.replace(/"/g, '""')}"`;
     };
 
-    // Create CSV rows
     const csvRows = [
       columns.join(","),
       ...data.map((record) =>
-        columns
-          .map((column) => escapeCSV(record[column]))
-          .join(",")
+        columns.map((column) => escapeCSV(record[column])).join(",")
       ),
     ];
 
-    // UTF-8 BOM for Excel compatibility
     const csvContent = "\uFEFF" + csvRows.join("\r\n");
 
-    // File name
     const fileName = `Student_Attendance_${new Date()
       .toISOString()
       .slice(0, 10)}.csv`;
 
-    // Download response
-    res.setHeader(
-      "Content-Type",
-      "text/csv; charset=utf-8"
-    );
-
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader(
       "Content-Disposition",
       `attachment; filename="${fileName}"`
     );
 
     return res.status(200).send(csvContent);
-
   } catch (error) {
     console.error("CSV EXPORT ERROR:", error);
 

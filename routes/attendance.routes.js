@@ -1,4 +1,3 @@
-
 import express from "express";
 
 import {
@@ -11,7 +10,7 @@ const router = express.Router();
 // Save attendance
 router.post("/", saveAttendance);
 
-// Export attendance CSV
+// Export attendance as CSV
 router.get("/export", exportAttendanceCSV);
 
 export default router;

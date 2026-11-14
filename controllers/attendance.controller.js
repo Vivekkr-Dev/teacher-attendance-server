@@ -1,4 +1,4 @@
-
+/** 
 import { supabase } from "../config/supabase.js";
 
 // ==========================================
@@ -182,6 +182,219 @@ export const exportAttendanceCSV = async (req, res) => {
     );
 
     return res.status(200).send(csvContent);
+  } catch (error) {
+    console.error("CSV EXPORT ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to export attendance data.",
+      error: error.message,
+    });
+  }
+};   */
+
+
+
+
+
+
+import { supabase } from "../config/supabase.js";
+
+// ==========================================
+// SAVE ATTENDANCE
+// ==========================================
+
+export const saveAttendance = async (req, res) => {
+  try {
+    console.log("========== REQUEST BODY ==========");
+    console.log(req.body);
+
+    const {
+      teacher_id,
+      teacher_name,
+      class_name,
+      section,
+      period,
+      present_students,
+    } = req.body;
+
+    const periodNumber = Number(period);
+
+    if (
+      period === undefined ||
+      period === null ||
+      period === "" ||
+      !Number.isInteger(periodNumber) ||
+      periodNumber < 1 ||
+      periodNumber > 8
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid period. Please select a period from 1 to 8.",
+        receivedPeriod: period,
+      });
+    }
+
+    if (
+      !teacher_id ||
+      !teacher_name ||
+      !class_name ||
+      !section ||
+      present_students === undefined ||
+      present_students === null ||
+      present_students === "" ||
+      !Number.isFinite(Number(present_students)) ||
+      Number(present_students) < 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "All attendance fields are required.",
+      });
+    }
+
+    const now = new Date();
+
+    const attendance_date = now.toLocaleDateString("en-CA", {
+      timeZone: "Asia/Kolkata",
+    });
+
+    const attendance_time = now.toLocaleTimeString("en-GB", {
+      timeZone: "Asia/Kolkata",
+      hour12: false,
+    });
+
+    const attendanceData = {
+      teacher_id: Number(teacher_id),
+      teacher_name: String(teacher_name),
+      class_name: String(class_name),
+      section: String(section),
+      period: periodNumber,
+      present_students: Number(present_students),
+      attendance_date,
+      attendance_time,
+    };
+
+    const { data, error } = await supabase
+      .from("attendance")
+      .insert([attendanceData])
+      .select();
+
+    if (error) throw error;
+
+    return res.status(201).json({
+      success: true,
+      message: "Attendance Saved Successfully",
+      attendance: data,
+    });
+
+  } catch (error) {
+    console.error("SAVE ATTENDANCE ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+// ==========================================
+// GET ATTENDANCE HISTORY
+// ==========================================
+
+export const getAttendanceHistory = async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("attendance")
+      .select("*")
+      .order("attendance_date", { ascending: false })
+      .order("attendance_time", { ascending: false });
+
+    if (error) throw error;
+
+    return res.status(200).json({
+      success: true,
+      count: data.length,
+      attendance: data,
+    });
+
+  } catch (error) {
+    console.error("GET ATTENDANCE HISTORY ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+// ==========================================
+// EXPORT ATTENDANCE AS CSV
+// ==========================================
+
+export const exportAttendanceCSV = async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("attendance")
+      .select("*")
+      .order("attendance_date", { ascending: false })
+      .order("attendance_time", { ascending: false });
+
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No attendance records found.",
+      });
+    }
+
+    const columns = [
+      "id",
+      "teacher_id",
+      "teacher_name",
+      "class_name",
+      "section",
+      "period",
+      "present_students",
+      "attendance_date",
+      "attendance_time",
+    ];
+
+    const escapeCSV = (value) => {
+      if (value === null || value === undefined) return '""';
+
+      let safeValue = String(value);
+
+      if (/^[\s]*[=+\-@]/.test(safeValue)) {
+        safeValue = "'" + safeValue;
+      }
+
+      return `"${safeValue.replace(/"/g, '""')}"`;
+    };
+
+    const csvRows = [
+      columns.join(","),
+      ...data.map((record) =>
+        columns.map((column) => escapeCSV(record[column])).join(",")
+      ),
+    ];
+
+    const csvContent = "\uFEFF" + csvRows.join("\r\n");
+
+    const fileName = `Student_Attendance_${new Date()
+      .toISOString()
+      .slice(0, 10)}.csv`;
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${fileName}"`
+    );
+
+    return res.status(200).send(csvContent);
+
   } catch (error) {
     console.error("CSV EXPORT ERROR:", error);
 
